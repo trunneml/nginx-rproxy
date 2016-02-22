@@ -29,9 +29,10 @@ RUN apt-get update \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
 
-COPY app /app
-WORKDIR /app
+COPY app /srv/rproxy
+WORKDIR /srv/rproxy
 
 VOLUME ["/etc/nginx/conf.d/"]
+VOLUME ["/srv/rproxy/conf.d/"]
 
 CMD ["forego", "start", "-r"]
