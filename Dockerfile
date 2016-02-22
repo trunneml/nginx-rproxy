@@ -1,14 +1,13 @@
 FROM nginx:latest
 MAINTAINER Michael Trunner <michael@trunner.de>
 
-# Install letsencrypt and some other stuff
+# Install some debian stuff
 COPY testing.list /etc/apt/sources.list.d/
 COPY apt_preferences /etc/apt/preferences
 RUN apt-get update \
  && apt-get install -y -q --no-install-recommends \
     ca-certificates \
     wget \
- && apt-get install -y -q --no-install-recommends -t testing letsencrypt \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
 
@@ -19,10 +18,20 @@ RUN wget -P /usr/local/bin https://godist.herokuapp.com/projects/ddollar/forego/
 # Configure Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 
+RUN apt-get update \
+ && apt-get install -y -q --no-install-recommends \
+    git \
+ && cd /opt/ \
+ && git clone https://github.com/kuba/simp_le.git \
+ && cd /opt/simp_le \
+ && ./bootstrap.sh \
+ && ./venv.sh \
+ && apt-get clean \
+ && rm -r /var/lib/apt/lists/*
+
 COPY app /app
 WORKDIR /app
 
 VOLUME ["/etc/nginx/conf.d/"]
-VOLUME ["/etc/letsencrypt/"]
 
 CMD ["forego", "start", "-r"]
