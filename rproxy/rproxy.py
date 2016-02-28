@@ -1,14 +1,27 @@
 #!/usr/bin/env python
 import argparse
+import ctypes
 import datetime
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
-import time
 
 logger = logging.getLogger('RProxy' if __name__ == '__main__' else __name__)
+
+
+libc = ctypes.CDLL("libc.so.6")
+
+
+def set_pdeathsig(sig=signal.SIGTERM):
+    """
+    For more information see: http://stackoverflow.com/a/19448096
+    """
+    def func():
+        return libc.prctl(1, sig)
+    return func
 
 
 def read_file(filepath):
@@ -177,13 +190,14 @@ class SimpLeCertGenerator(object):
 
 class RProxy(object):
 
-    NGINX_RELOAD = ['nginx', '-s', 'reload']
+    NGINX_START = ['nginx', '-g', "daemon off;"]
 
     def __init__(self, cert_generator, config_generator, vhosts):
         self.cert_generator = cert_generator
         self.config_generator = config_generator
         self.vhosts = vhosts
         self._next_run = datetime.datetime.now()
+        self._nginx = None
 
     def init_config(self):
         self.config_generator.clean_config_dir()
@@ -193,24 +207,52 @@ class RProxy(object):
             except ConfigGeneratorError as vhe:
                 logger.error(vhe)
 
-    def run(self):
-        while True:  # Waiting for SIG_TERM
-            if datetime.datetime.now() < self._next_run:
-                time.sleep(3600)
-            else:
-                self._run()
-                nd = datetime.date.today() + datetime.timedelta(days=1)
-                self._next_run = datetime.datetime(
-                    year=nd.year, month=nd.month, day=nd.day, hour=2)
-                logger.debug("Next run scheduled for: %s", self._next_run)
+    def _restart_nginx(self):
+        if self._nginx and self._nginx.poll() is not None:
+            logger.critical(
+                "NGINX died with exit_code %s", self._nginx.returncode)
+            self._nginx = None
+        if not self._nginx:
+            logger.info("Starting nginx")
+            self._nginx = subprocess.Popen(
+                self.NGINX_START, preexec_fn=set_pdeathsig(signal.SIGTERM))
+        else:
+            logger.debug("Sending SIGHUP to nginx for a config reload")
+            self._nginx.send_signal(signal.SIGHUP)
 
-    def _run(self):
+    def run(self):
+        def receive_alarm(signum, stack):  # pylint: disable=unused-argument
+            """
+            Will be trigged by SIGALRM and generates new nginx cers and config
+            """
+            logger.debug("SIGNAL %s received by SIGALRM handler", signum)
+            self._update_config()
+            signal.alarm(3600)
+        signal.signal(signal.SIGALRM, receive_alarm)
+        # Wait sometime so nginx is ready for acme challange
+        signal.alarm(5)
+        while True:
+            self._restart_nginx()
+            self._nginx.wait()  # Wait for SIGALRM or NGINX dies
+
+    def _update_config(self):
+        if datetime.datetime.now() < self._next_run:
+            logger.debug("To early for a cert update.")
+            return
+
         nginx_reload = any(
             (self._new_cert_and_config(vhost)
              for vhost in self.vhosts if vhost.letsencrypt))
         if nginx_reload:
-            logger.info("NGINX needs a reload")
-            self.nginx_reload()
+            logger.debug("NGINX needs a reload")
+            self._restart_nginx()
+        self._schedule_next_cert_update()
+
+    def _schedule_next_cert_update(self):
+        nd = datetime.date.today() + datetime.timedelta(days=1)
+        self._next_run = datetime.datetime(
+            year=nd.year, month=nd.month, day=nd.day, hour=2)
+        logger.debug("Next run scheduled for: %s", self._next_run)
 
     def _new_cert_and_config(self, vhost):
         try:
@@ -224,16 +266,6 @@ class RProxy(object):
         except ConfigGeneratorError as vhe:
             logger.error(vhe)
             return False
-
-    def nginx_reload(self):
-        try:
-            logger.info("Sending RELOAD signal to nginx")
-            logger.debug("Calling command: %s", self.NGINX_RELOAD)
-            subprocess.check_call(self.NGINX_RELOAD)
-        except subprocess.CalledProcessError as cpe:
-            logger.critical(cpe)
-        except OSError as ose:
-            logger.critical(ose)
 
 
 def _get_args():
@@ -291,9 +323,8 @@ def main():
     except ConfigError as ce:
         logger.error(ce)  # pylint: disable=no-member
         sys.exit(1)
-    if args.mode == 'init':
-        rproxy.init_config()
-    else:
+    rproxy.init_config()
+    if args.mode == 'run':
         rproxy.run()
 
 

@@ -10,10 +10,6 @@ RUN apt-get update \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
 
-# Install Forego
-RUN wget -P /usr/local/bin https://godist.herokuapp.com/projects/ddollar/forego/releases/current/linux-amd64/forego \
-  && chmod u+x /usr/local/bin/forego
-
 # Configure Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 
@@ -33,11 +29,7 @@ COPY rproxy /srv/rproxy
 WORKDIR /srv/rproxy
 ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod 755 /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-
 VOLUME ["/etc/nginx/conf.d/"]
 VOLUME ["/srv/rproxy/vhost/"]
 
-CMD ["forego", "start", "-r"]
+CMD ["/srv/rproxy/rproxy.py", "run"]
