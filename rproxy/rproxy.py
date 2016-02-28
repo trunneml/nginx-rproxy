@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 
-logger = logging.getLogger(__name__ if __name__ != '__main__' else 'RProxy')
+logger = logging.getLogger('RProxy' if __name__ == '__main__' else __name__)
 
 
 def read_file(filepath):
