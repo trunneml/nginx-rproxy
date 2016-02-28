@@ -14,7 +14,7 @@ def read_file(filepath):
         return readfile.read()
 
 
-class ReverseProxyConfigGernerator(object):
+class NginxConfigGenerator(object):
 
     class VhostError(Exception):
         pass
@@ -122,10 +122,10 @@ def main():
         logging.basicConfig(level=logging.DEBUG)
 
     try:
-        rproxy = ReverseProxyConfigGernerator(
+        rproxy = NginxConfigGenerator(
             args.templates, args.vhostdir, args.nginxconfd)
         rproxy.configure_all_vhosts()
-    except ReverseProxyConfigGernerator.ConfigError as ce:
+    except NginxConfigGenerator.ConfigError as ce:
         logger.error(ce)  # pylint: disable=no-member
         sys.exit(1)
 
