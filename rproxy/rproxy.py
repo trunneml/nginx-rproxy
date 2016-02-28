@@ -124,7 +124,8 @@ class NginxConfigGenerator(object):
         try:
             nginx_conf = nginx_tmpl % {'servernames': ' '.join(vhost.domains),
                                        'target': vhost.target,
-                                       'document_root': self.document_root}
+                                       'document_root': self.document_root,
+                                       'vhost': vhost.name}
         except KeyError as ke:
             raise ConfigGeneratorError(
                 "Missing config parameters for vhost %s" % vhost, ke)
