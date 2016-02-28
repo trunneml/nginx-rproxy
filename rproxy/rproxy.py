@@ -179,7 +179,11 @@ class SimpLeCertGenerator(object):
         for domain in vhost.domains:
             cmd.extend(("-d", domain))
         logger.debug("Calling command: %s", cmd)
-        exit_code = subprocess.call(cmd, cwd=vhost.folder)
+        try:
+            exit_code = subprocess.call(cmd, cwd=vhost.folder)
+        except OSError as ose:
+            raise CertGenerationError(
+                "Error while generating cert for %s", ose)
         logger.debug("Command exit code was: %i", exit_code)
         if exit_code >= 2:
             raise CertGenerationError(
