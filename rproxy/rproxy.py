@@ -110,7 +110,7 @@ class NginxConfigGenerator(object):
 
     def hasCertificate(self, vhost):
         key_file = os.path.join(vhost.folder, self.KEY_FILE)
-        cert_file = os.path.join(vhost.folder, vhost.name, self.CERT_FILE)
+        cert_file = os.path.join(vhost.folder, self.CERT_FILE)
         return os.path.isfile(key_file) and os.path.isfile(cert_file)
 
     def configure_vhost(self, vhost):

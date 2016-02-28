@@ -33,4 +33,4 @@ ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
 VOLUME ["/etc/nginx/conf.d/"]
 VOLUME ["/srv/rproxy/vhost/"]
 
-CMD ["/srv/rproxy/rproxy.py", "-v", "run"]
+CMD ["/srv/rproxy/rproxy.py", "-vv", "run"]
