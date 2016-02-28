@@ -4,6 +4,6 @@
 
 rm -f ${NGINXDIR}/*.conf
 
-/srv/rproxy/rproxy.py
+/srv/rproxy/rproxy.py init
 
 exec "$@"

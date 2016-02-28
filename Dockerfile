@@ -31,6 +31,7 @@ RUN apt-get update \
 
 COPY rproxy /srv/rproxy
 WORKDIR /srv/rproxy
+ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh

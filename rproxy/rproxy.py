@@ -78,10 +78,13 @@ class NginxConfigGenerator(object):
     CERT_FILE = 'fullchain.pem'
     KEY_FILE = 'key.pem'
 
-    def __init__(self, template_dir, nginx_conf_dir):
+    def __init__(self, template_dir, nginx_conf_dir, document_root):
         if not os.path.isdir(nginx_conf_dir):
             raise ConfigError("NGINX config path must be a directory")
         self.nginx_conf_dir = nginx_conf_dir
+        if not os.path.isdir(document_root):
+            raise ConfigError("document_root must be a directory")
+        self.document_root = document_root
         logger.info("Initializing templates from %s", template_dir)
         try:
             self.http_template = read_file(
@@ -107,7 +110,8 @@ class NginxConfigGenerator(object):
             nginx_tmpl = self.http_template
         try:
             nginx_conf = nginx_tmpl % {'servernames': ' '.join(vhost.domains),
-                                       'target': vhost.target}
+                                       'target': vhost.target,
+                                       'document_root': self.document_root}
         except KeyError as ke:
             raise ConfigGeneratorError(
                 "Missing config parameters for vhost %s" % vhost, ke)
@@ -228,6 +232,8 @@ class RProxy(object):
             subprocess.check_call(self.NGINX_RELOAD)
         except subprocess.CalledProcessError as cpe:
             logger.critical(cpe)
+        except OSError as ose:
+            logger.critical(ose)
 
 
 def _get_args():
@@ -278,7 +284,8 @@ def main():
 
     try:
         simp_le = SimpLeCertGenerator(args.simp_le, args.document_root)
-        nginx_config = NginxConfigGenerator(args.templates, args.nginxconfd)
+        nginx_config = NginxConfigGenerator(
+            args.templates, args.nginxconfd, args.document_root)
         vhosts = get_vhosts(args.vhostdir)
         rproxy = RProxy(simp_le, nginx_config, vhosts)
     except ConfigError as ce:
