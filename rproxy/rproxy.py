@@ -173,6 +173,8 @@ class SimpLeCertGenerator(object):
         cmd = [self.simp_le_path, "--default_root", self.document_root,
                "-f", "account_key.json",
                "-f", "fullchain.pem", "-f", "key.pem"]
+        cmd.extend(
+            ("--server", "https://acme-staging.api.letsencrypt.org/directory"))
         cmd.extend(("--email", vhost.email))
         for domain in vhost.domains:
             cmd.extend(("-d", domain))
