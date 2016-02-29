@@ -24,13 +24,11 @@ RUN apt-get update \
  && ./venv.sh \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
+ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
 
 COPY rproxy /srv/rproxy
 WORKDIR /srv/rproxy
-ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
-ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
 
-VOLUME ["/etc/nginx/conf.d/"]
 VOLUME ["/srv/rproxy/vhost/"]
 
 CMD ["/srv/rproxy/rproxy.py", "-vv", "run"]

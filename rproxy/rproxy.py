@@ -159,11 +159,14 @@ class CertGenerationError(Exception):
 
 class SimpLeCertGenerator(object):
 
-    def __init__(self, simp_le_path, document_root):
+    TESTING = "https://acme-staging.api.letsencrypt.org/directory"
+
+    def __init__(self, simp_le_path, document_root, testing):
         self.simp_le_path = simp_le_path
         if not os.path.isdir(document_root):
             raise ConfigError("document_root must be a directory")
         self.document_root = document_root
+        self.testing = testing
 
     def generate_cert(self, vhost):
         """
@@ -174,8 +177,9 @@ class SimpLeCertGenerator(object):
         cmd = [self.simp_le_path, "--default_root", self.document_root,
                "-f", "account_key.json",
                "-f", "fullchain.pem", "-f", "key.pem"]
-        cmd.extend(
-            ("--server", "https://acme-staging.api.letsencrypt.org/directory"))
+        if self.testing:
+            logger.warn("Using ACME staging directory!")
+            cmd.extend(("--server", self.TESTING))
         cmd.extend(("--email", vhost.email))
         for domain in vhost.domains:
             cmd.extend(("-d", domain))
@@ -298,8 +302,12 @@ def _get_args():
     parser.add_argument("-s", "--simp_le", default=simp_le,
                         help="path to simp_le acme client")
 
-    document_root = os.environ.get('RPROXY_DOCUMENT_ROOT', '/var/www/')
+    document_root = os.environ.get('RPROXY_DOCUMENT_ROOT', 'webroot')
     parser.add_argument("-r", "--document_root", default=document_root,
+                        help="path to document_root")
+
+    testing = os.environ.get('RPROXY_TESTING', None)
+    parser.add_argument("--testing", default=testing,
                         help="path to document_root")
 
     parser.add_argument("mode", choices=['init', 'run'],
@@ -322,7 +330,8 @@ def main():
     _configure_logging(args)
 
     try:
-        simp_le = SimpLeCertGenerator(args.simp_le, args.document_root)
+        simp_le = SimpLeCertGenerator(
+            args.simp_le, args.document_root, args.testing)
         nginx_config = NginxConfigGenerator(
             args.templates, args.nginxconfd, args.document_root)
         vhosts = get_vhosts(args.vhostdir)
