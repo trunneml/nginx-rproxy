@@ -86,8 +86,8 @@ class ConfigGeneratorError(Exception):
 
 class NginxConfigGenerator(object):
 
-    HTTP_TMPL = 'rproxy-80.conf'
-    HTTPS_TMPL = 'rproxy-443.conf'
+    HTTP_TMPL = 'http.conf.tmpl'
+    HTTPS_TMPL = 'https.conf.tmpl'
     CERT_FILE = 'fullchain.pem'
     KEY_FILE = 'key.pem'
 
