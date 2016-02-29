@@ -24,11 +24,19 @@ RUN apt-get update \
  && ./venv.sh \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
-ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
 
-COPY rproxy /srv/rproxy
+ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
+ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
+
+RUN mkdir -p ${RPROXY_DOCUMENT_ROOT}
+COPY rproxy.py /srv/rproxy
+COPY templates /srv/rproxy/templates
 WORKDIR /srv/rproxy
 
 VOLUME ["/srv/rproxy/vhost/"]
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 CMD ["/srv/rproxy/rproxy.py", "-vv", "run"]
