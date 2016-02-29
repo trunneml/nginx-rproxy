@@ -10,3 +10,4 @@ nginx reverse proxy Docker image with let's encrypt support
 * ~~Handle nginx crash and restart~~
 * ~~Restart nginx when certs have changed~~
 * Reduce disk space
+* Improved logging output

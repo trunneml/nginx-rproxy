@@ -302,7 +302,8 @@ def _get_args():
     parser.add_argument("-s", "--simp_le", default=simp_le,
                         help="path to simp_le acme client")
 
-    document_root = os.environ.get('RPROXY_DOCUMENT_ROOT', 'webroot')
+    document_root = os.environ.get(
+        'RPROXY_DOCUMENT_ROOT', os.path.abspath('webroot'))
     parser.add_argument("-r", "--document_root", default=document_root,
                         help="path to document_root")
 
