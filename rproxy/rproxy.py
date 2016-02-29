@@ -251,9 +251,10 @@ class RProxy(object):
             logger.debug("To early for a cert update.")
             return
 
-        nginx_reload = any(
-            (self._new_cert_and_config(vhost)
-             for vhost in self.vhosts if vhost.letsencrypt))
+        nginx_reload = False
+        for vhost in self.vhosts:
+            if vhost.letsencrypt:
+                nginx_reload = nginx_reload or self._new_cert_and_config(vhost)
         if nginx_reload:
             logger.debug("NGINX needs a reload")
             self._restart_nginx()
