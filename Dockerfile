@@ -28,7 +28,7 @@ ENV RPROXY_SIMP_LE /opt/simp_le/venv/bin/simp_le
 ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
 
 RUN mkdir -p ${RPROXY_DOCUMENT_ROOT}
-COPY rproxy.py /srv/rproxy/proxy.py
+COPY rproxy.py /srv/rproxy/rproxy
 COPY templates /srv/rproxy/templates
 WORKDIR /srv/rproxy
 
