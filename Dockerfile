@@ -2,7 +2,6 @@ FROM nginx:latest
 MAINTAINER Michael Trunner <michael@trunner.de>
 
 # Install some debian stuff
-COPY apt/* /etc/apt/
 RUN apt-get update \
  && apt-get install -y -q --no-install-recommends \
     ca-certificates \
