@@ -6,11 +6,11 @@ It supports SSL certificate creation with let's encrypt and restarts nginx in ca
 
 ## Features:
 
-* Based on the official nginx docker image
+* Based on the **official nginx** docker image
 * Simple **Json configuration**
 * **HTTPS support** when certificate is present
 * HTTP to HTTS redirect
-* Auto SSL certificate creation with **Let's encrypt**
+* Auto SSL **certificate creation with Let's encrypt**
 * Restart nginx when needed
 * Monitors nginx if it crashes
 
