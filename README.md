@@ -1,5 +1,5 @@
 # nginx-rproxy
-nginx-rproxy is a Docker image that contains a python program that configures and starts nginx as a reverse proxy.
+nginx-rproxy is a Docker image that contains a python program to configure and starting nginx as a reverse proxy.
 It supports SSL certificate creation with let's encrypt and restarts nginx in case of an error.
 
 ## Features:
