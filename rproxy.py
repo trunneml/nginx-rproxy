@@ -48,8 +48,8 @@ class Vhost(object):
     def __init__(self, vhost_folder):
         self.folder = os.path.abspath(vhost_folder)
         self.name = os.path.basename(vhost_folder)
-        self.certificate_file = os.path.join(self.folder, "fullchain.pem"),
-        self.private_key_file = os.path.join(self.folder, "key.pem"),
+        self.certificate_file = os.path.join(self.folder, "fullchain.pem")
+        self.private_key_file = os.path.join(self.folder, "key.pem")
         config = self._read_config()
         try:
             self.email = config['email']
