@@ -9,7 +9,11 @@ import os
 import signal
 import subprocess
 import sys
+
+import idna
+
 from free_tls_certificates import client as freetls
+from free_tls_certificates import utils as freetlsutis
 
 
 logger = logging.getLogger(  # pylint: disable=C0103
@@ -39,11 +43,13 @@ class ConfigError(Exception):
 
 
 class Vhost(object):
-    # pylint: disable=R0903
+    # pylint: disable=R0903, R0902
 
     def __init__(self, vhost_folder):
         self.folder = os.path.abspath(vhost_folder)
         self.name = os.path.basename(vhost_folder)
+        self.certificate_file = os.path.join(self.folder, "fullchain.pem"),
+        self.private_key_file = os.path.join(self.folder, "key.pem"),
         config = self._read_config()
         try:
             self.email = config['email']
@@ -57,6 +63,10 @@ class Vhost(object):
         except KeyError as key_error:
             raise ConfigError(
                 "Missing config parameter %s in %s" % (key_error, self))
+
+    def has_certificate(self):
+        return os.path.isfile(self.certificate_file) \
+            and os.path.isfile(self.private_key_file)
 
     def _read_config(self):
         logger.debug("Reading vhost config of %s", self)
@@ -94,8 +104,6 @@ class NginxConfigGenerator(object):
 
     HTTP_TMPL = 'http.conf.tmpl'
     HTTPS_TMPL = 'https.conf.tmpl'
-    CERT_FILE = 'fullchain.pem'
-    KEY_FILE = 'key.pem'
 
     def __init__(self, template_dir, nginx_conf_dir, document_root):
         if not os.path.isdir(nginx_conf_dir):
@@ -114,14 +122,9 @@ class NginxConfigGenerator(object):
             logger.error(ioe)
             raise ConfigError("Coundn't read nginx templates")
 
-    def has_certificate(self, vhost):
-        key_file = os.path.join(vhost.folder, self.KEY_FILE)
-        cert_file = os.path.join(vhost.folder, self.CERT_FILE)
-        return os.path.isfile(key_file) and os.path.isfile(cert_file)
-
     def configure_vhost(self, vhost):
         logger.info("Generating vhost config for %s", vhost)
-        if self.has_certificate(vhost):
+        if vhost.has_certificate():
             logger.debug("Using HTTPS template for %s", vhost)
             nginx_tmpl = self.https_template
         else:
@@ -173,7 +176,7 @@ class FreeTlsCertGenerator(object):
             document_root, '.well-known', 'acme-challenge')
         try:
             os.makedirs(self.acme_challenge_dir)
-        except Error:
+        except os.error:
             # directory already exists
             pass
         self.testing = testing
@@ -185,18 +188,20 @@ class FreeTlsCertGenerator(object):
         """
         logger.info("Generating new let's encrypt certificate for %s", vhost)
 
+        if self._check_certificate(vhost):
+            return True
         try:
             tos_url = self._get_tos_url(vhost)
             self._issue_certificate(vhost, tos_url)
+            return True
         except freetls.WaitABit as wait_error:
             logger.warning("Try again after: %s", wait_error.until_when)
             return False
-        except Exception:
+        except Exception:  # pylint: disable=W0703
             logger.exception(
                 "Unknown exception occured while generating certificate for %s",
                 vhost)
             return False
-        return True
 
     def _get_tos_url(self, vhost):
         try:
@@ -204,6 +209,49 @@ class FreeTlsCertGenerator(object):
         except freetls.NeedToAgreeToTOS as tos_error:
             return tos_error.url
         raise CertGenerationError("TOS URL detection failed")
+
+    @staticmethod
+    def _check_certificate(vhost, days=30, self_signed=False):
+        if not os.path.exists(vhost.certificate_filename):
+            logger.info("Certificate file of %s not present.", vhost)
+            return False
+
+        # Load the certificate.
+        cert = freetlsutis.load_certificate(vhost.certificate_filename)
+
+        # If this is a self-signed certificate (and the user is seeking
+        # a real one), provision a new one.
+        if cert.issuer == cert.subject and not self_signed:
+            logger.info("Replacing self-signed certificate of %s", vhost)
+            return False
+
+        # If this is expiring within the given days, provision a new one.
+        expires_in = cert.not_valid_after - datetime.datetime.now()
+        if expires_in < datetime.timedelta(days=days):
+            logger.info("Replacing expiring certificate of %s (expires in %s).",
+                        vhost, expires_in)
+            return False
+
+        # If the certificate is not valid for one of the domains
+        # we're requesting, provision a new one.
+        def idna_encode(domain):
+            # squash exceptions here
+            try:
+                return idna.encode(domain).decode("ascii")
+            except Exception:  # pylint: disable=W0703
+                return domain
+
+        request_domains = set(idna_encode(domain) for domain in vhost.domains)
+        cert_domains = set(freetlsutis.get_certificate_domains(cert))
+        missing_domains = request_domains - cert_domains
+        if missing_domains:
+            logger.info("Certificate of %s is not valid for: %s",
+                        vhost, missing_domains)
+            return False
+
+        # Certificate is valid for the requested domains - no need to provision.
+        logger.info("Certificate of %s is valid", vhost)
+        return True
 
     def _issue_certificate(self, vhost, tos_url):
         try:
@@ -227,8 +275,8 @@ class FreeTlsCertGenerator(object):
     def _call_freetls(self, vhost, agree_to_tos_url=None):
         freetls.issue_certificate(
             domains=vhost.domains,
-            certificate_file=os.path.join(vhost.folder, "fullchain.pem"),
-            private_key_file=os.path.join(vhost.folder, "key.pem"),
+            certificate_file=vhost.certificate_file,
+            private_key_file=vhost.private_key_file,
             account_cache_directory=vhost.folder,
             acme_server=freetls.LETSENCRYPT_STAGING_SERVER if self.testing \
                 else freetls.LETSENCRYPT_SERVER,
