@@ -274,13 +274,16 @@ class FreeTlsCertGenerator(object):
             filepointer.write(content)
 
     def _call_freetls(self, vhost, agree_to_tos_url=None):
+        if self.testing:
+            acme_server = freetls.LETSENCRYPT_STAGING_SERVER
+        else:
+            acme_server = freetls.LETSENCRYPT_SERVER
         freetls.issue_certificate(
             domains=vhost.domains,
             certificate_file=vhost.certificate_file,
             private_key_file=vhost.private_key_file,
             account_cache_directory=vhost.folder,
-            acme_server=freetls.LETSENCRYPT_STAGING_SERVER if self.testing \
-                else freetls.LETSENCRYPT_SERVER,
+            acme_server=acme_server,
             agree_to_tos_url=agree_to_tos_url)
 
 class RProxy(object):
