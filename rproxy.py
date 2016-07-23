@@ -212,12 +212,12 @@ class FreeTlsCertGenerator(object):
 
     @staticmethod
     def _check_certificate(vhost, days=30, self_signed=False):
-        if not os.path.exists(vhost.certificate_filename):
+        if not os.path.exists(vhost.certificate_file):
             logger.info("Certificate file of %s not present.", vhost)
             return False
 
         # Load the certificate.
-        cert = freetlsutis.load_certificate(vhost.certificate_filename)
+        cert = freetlsutis.load_certificate(vhost.certificate_file)
 
         # If this is a self-signed certificate (and the user is seeking
         # a real one), provision a new one.
