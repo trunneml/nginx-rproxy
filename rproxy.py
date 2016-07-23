@@ -171,7 +171,11 @@ class FreeTlsCertGenerator(object):
             raise ConfigError("document_root must be a directory")
         self.acme_challenge_dir = os.path.join(
             document_root, '.well-known', 'acme-challenge')
-        os.makedirs(self.acme_challenge_dir, exist_ok=True)
+        try:
+            os.makedirs(self.acme_challenge_dir)
+        except Error:
+            # directory already exists
+            pass
         self.testing = testing
 
     def generate_cert(self, vhost):
