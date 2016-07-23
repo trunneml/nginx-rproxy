@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pylint: disable=C0111
 import argparse
 import ctypes
 import datetime
@@ -8,6 +9,8 @@ import os
 import signal
 import subprocess
 import sys
+from free_tls_certificates import client as freetls
+
 
 logger = logging.getLogger(  # pylint: disable=C0103
     'RProxy' if __name__ == '__main__' else __name__)
@@ -160,16 +163,15 @@ class CertGenerationError(Exception):
     pass
 
 
-class SimpLeCertGenerator(object):
+class FreeTlsCertGenerator(object):
     # pylint: disable=R0903
 
-    TESTING = "https://acme-staging.api.letsencrypt.org/directory"
-
-    def __init__(self, simp_le_path, document_root, testing):
-        self.simp_le_path = simp_le_path
+    def __init__(self, document_root, testing):
         if not os.path.isdir(document_root):
             raise ConfigError("document_root must be a directory")
-        self.document_root = document_root
+        self.acme_challenge_dir = os.path.join(
+            document_root, '.well-known', 'acme-challenge')
+        os.makedirs(self.acme_challenge_dir, exist_ok=True)
         self.testing = testing
 
     def generate_cert(self, vhost):
@@ -178,30 +180,55 @@ class SimpLeCertGenerator(object):
         False when no update is needed.
         """
         logger.info("Generating new let's encrypt certificate for %s", vhost)
-        cmd = [self.simp_le_path, "--default_root", self.document_root,
-               "-f", "account_key.json",
-               "-f", "fullchain.pem", "-f", "key.pem"]
-        if self.testing:
-            logger.warning("Using ACME staging directory!")
-            cmd.extend(("--server", self.TESTING))
-        cmd.extend(("--email", vhost.email))
-        for domain in vhost.domains:
-            cmd.extend(("-d", domain))
-        logger.debug("Calling command: %s", cmd)
-        try:
-            exit_code = subprocess.call(cmd, cwd=vhost.folder)
-        except OSError as ose:
-            raise CertGenerationError(
-                "Error while generating cert for %s", ose)
-        logger.debug("Command exit code was: %i", exit_code)
-        if exit_code >= 2:
-            raise CertGenerationError(
-                "Error %i while generating cert for %s"
-                % (exit_code, vhost.domains))
-        if exit_code == 0:
-            logger.info("New certificate generated for %s", vhost)
-        return exit_code == 0
 
+        try:
+            tos_url = self._get_tos_url(vhost)
+            self._issue_certificate(vhost, tos_url)
+        except freetls.WaitABit as wait_error:
+            logger.warning("Try again after: %s", wait_error.until_when)
+            return False
+        except Exception:
+            logger.exception(
+                "Unknown exception occured while generating certificate for %s",
+                vhost)
+            return False
+        return True
+
+    def _get_tos_url(self, vhost):
+        try:
+            self._call_freetls(vhost)
+        except freetls.NeedToAgreeToTOS as tos_error:
+            return tos_error.url
+        raise CertGenerationError("TOS URL detection failed")
+
+    def _issue_certificate(self, vhost, tos_url):
+        try:
+            self._call_freetls(vhost, tos_url)
+        except freetls.NeedToTakeAction as action_error:
+            for action in action_error.actions:
+                if not isinstance(action, freetls.NeedToInstallFile):
+                    raise CertGenerationError(
+                        "Unexpected error while validating domain: %s", action)
+                self._write_acme_challenge_file(action.file_name,
+                                                action.contents)
+            # Try it one more time
+            self._call_freetls(vhost, tos_url)
+
+    def _write_acme_challenge_file(self, file_name, content):
+        logger.debug("Writing challange file: %s", file_name)
+        filename = os.path.join(self.acme_challenge_dir, file_name)
+        with open(filename, 'w') as filepointer:
+            filepointer.write(content)
+
+    def _call_freetls(self, vhost, agree_to_tos_url=None):
+        freetls.issue_certificate(
+            domains=vhost.domains,
+            certificate_file=os.path.join(vhost.folder, "fullchain.pem"),
+            private_key_file=os.path.join(vhost.folder, "key.pem"),
+            account_cache_directory=vhost.folder,
+            acme_server=freetls.LETSENCRYPT_STAGING_SERVER if self.testing \
+                else freetls.LETSENCRYPT_SERVER,
+            agree_to_tos_url=agree_to_tos_url)
 
 class RProxy(object):
 
@@ -303,10 +330,6 @@ def _get_args():
     parser.add_argument("-n", "--nginxconfd", default=nginx_conf_dir,
                         help="path to the nginx conf.d directory")
 
-    simp_le = os.environ.get('RPROXY_SIMP_LE', 'simp_le')
-    parser.add_argument("-s", "--simp_le", default=simp_le,
-                        help="path to simp_le acme client")
-
     document_root = os.environ.get(
         'RPROXY_DOCUMENT_ROOT', os.path.abspath('webroot'))
     parser.add_argument("-r", "--document_root", default=document_root,
@@ -336,12 +359,11 @@ def main():
     _configure_logging(args)
 
     try:
-        simp_le = SimpLeCertGenerator(
-            args.simp_le, args.document_root, args.testing)
+        gener = FreeTlsCertGenerator(args.document_root, args.testing)
         nginx_config = NginxConfigGenerator(
             args.templates, args.nginxconfd, args.document_root)
         vhosts = get_vhosts(args.vhostdir)
-        rproxy = RProxy(simp_le, nginx_config, vhosts)
+        rproxy = RProxy(gener, nginx_config, vhosts)
     except ConfigError as config_error:
         logger.error(config_error)  # pylint: disable=no-member
         sys.exit(1)

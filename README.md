@@ -18,8 +18,6 @@ It supports SSL certificate creation with let's encrypt and restarts nginx in ca
 **Note:** This project is in an early state, but is in production use.
 
 ## TODOs
-
-* Reduce disk space by replacing simp_le
 * Improved logging output
 * Write some test
 * Write setup.py
