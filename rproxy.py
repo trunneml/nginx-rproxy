@@ -189,7 +189,7 @@ class FreeTlsCertGenerator(object):
         logger.info("Generating new let's encrypt certificate for %s", vhost)
 
         if self._check_certificate(vhost):
-            return True
+            return False
         try:
             tos_url = self._get_tos_url(vhost)
             self._issue_certificate(vhost, tos_url)
@@ -324,19 +324,20 @@ class RProxy(object):
             signal.alarm(3600)
         signal.signal(signal.SIGALRM, receive_alarm)
         # Wait sometime so nginx is ready for acme challange
-        signal.alarm(5)
+        signal.alarm(15)
         while True:
             self._restart_nginx()
             self._nginx.wait()  # Wait for SIGALRM or NGINX dies
 
     def _update_config(self):
-        if datetime.datetime.now() < self._next_run:
-            logger.debug("To early for a cert update.")
-            return
+        #if datetime.datetime.now() < self._next_run:
+        #    logger.debug("To early for a cert update.")
+        #    return
 
         nginx_reload = False
         for vhost in self.vhosts:
             if vhost.letsencrypt:
+                logger("Checking letsencrypt cert of vhost %s", vhost)
                 nginx_reload = nginx_reload or self._new_cert_and_config(vhost)
         if nginx_reload:
             logger.debug("NGINX needs a reload")
@@ -353,6 +354,7 @@ class RProxy(object):
         try:
             if not self.cert_generator.generate_cert(vhost):
                 return False
+            logger.info("Let's encrypt certificate of %s has changed", vhost)
             self.config_generator.configure_vhost(vhost)
             return True
         except CertGenerationError as cge:
