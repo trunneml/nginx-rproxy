@@ -337,7 +337,7 @@ class RProxy(object):
         nginx_reload = False
         for vhost in self.vhosts:
             if vhost.letsencrypt:
-                logger("Checking letsencrypt cert of vhost %s", vhost)
+                logger.info("Checking letsencrypt cert of vhost %s", vhost)
                 nginx_reload = nginx_reload or self._new_cert_and_config(vhost)
         if nginx_reload:
             logger.debug("NGINX needs a reload")
