@@ -9,10 +9,11 @@ import signal
 import subprocess
 import sys
 
-logger = logging.getLogger('RProxy' if __name__ == '__main__' else __name__)
+logger = logging.getLogger(  # pylint: disable=C0103
+    'RProxy' if __name__ == '__main__' else __name__)
 
 
-libc = ctypes.CDLL("libc.so.6")
+libc = ctypes.CDLL("libc.so.6")  # pylint: disable=C0103
 
 
 def set_pdeathsig(sig=signal.SIGTERM):
@@ -35,6 +36,7 @@ class ConfigError(Exception):
 
 
 class Vhost(object):
+    # pylint: disable=R0903
 
     def __init__(self, vhost_folder):
         self.folder = os.path.abspath(vhost_folder)
@@ -49,8 +51,9 @@ class Vhost(object):
             if not self.domains:
                 raise ConfigError("domains must not be empty", self)
             self.letsencrypt = config.get('letsencrypt', False)
-        except KeyError as ke:
-            raise ConfigError("Missing config parameter %s in %s" % (ke, self))
+        except KeyError as key_error:
+            raise ConfigError(
+                "Missing config parameter %s in %s" % (key_error, self))
 
     def _read_config(self):
         logger.debug("Reading vhost config of %s", self)
@@ -108,14 +111,14 @@ class NginxConfigGenerator(object):
             logger.error(ioe)
             raise ConfigError("Coundn't read nginx templates")
 
-    def hasCertificate(self, vhost):
+    def has_certificate(self, vhost):
         key_file = os.path.join(vhost.folder, self.KEY_FILE)
         cert_file = os.path.join(vhost.folder, self.CERT_FILE)
         return os.path.isfile(key_file) and os.path.isfile(cert_file)
 
     def configure_vhost(self, vhost):
         logger.info("Generating vhost config for %s", vhost)
-        if self.hasCertificate(vhost):
+        if self.has_certificate(vhost):
             logger.debug("Using HTTPS template for %s", vhost)
             nginx_tmpl = self.https_template
         else:
@@ -126,9 +129,9 @@ class NginxConfigGenerator(object):
                                        'target': vhost.target,
                                        'document_root': self.document_root,
                                        'vhost': vhost.name}
-        except KeyError as ke:
+        except KeyError as key_error:
             raise ConfigGeneratorError(
-                "Missing config parameters for vhost %s" % vhost, ke)
+                "Missing config parameters for vhost %s" % vhost, key_error)
         self.write_nginx_config(vhost, nginx_conf)
 
     def write_nginx_config(self, vhost, config):
@@ -158,6 +161,7 @@ class CertGenerationError(Exception):
 
 
 class SimpLeCertGenerator(object):
+    # pylint: disable=R0903
 
     TESTING = "https://acme-staging.api.letsencrypt.org/directory"
 
@@ -178,7 +182,7 @@ class SimpLeCertGenerator(object):
                "-f", "account_key.json",
                "-f", "fullchain.pem", "-f", "key.pem"]
         if self.testing:
-            logger.warn("Using ACME staging directory!")
+            logger.warning("Using ACME staging directory!")
             cmd.extend(("--server", self.TESTING))
         cmd.extend(("--email", vhost.email))
         for domain in vhost.domains:
@@ -261,9 +265,9 @@ class RProxy(object):
         self._schedule_next_cert_update()
 
     def _schedule_next_cert_update(self):
-        nd = datetime.date.today() + datetime.timedelta(days=1)
+        next_day = datetime.date.today() + datetime.timedelta(days=1)
         self._next_run = datetime.datetime(
-            year=nd.year, month=nd.month, day=nd.day, hour=2)
+            year=next_day.year, month=next_day.month, day=next_day.day, hour=2)
         logger.debug("Next run scheduled for: %s", self._next_run)
 
     def _new_cert_and_config(self, vhost):
@@ -273,7 +277,7 @@ class RProxy(object):
             self.config_generator.configure_vhost(vhost)
             return True
         except CertGenerationError as cge:
-            logger.warn(cge)
+            logger.warning(cge)
             return False
         except ConfigGeneratorError as vhe:
             logger.error(vhe)
@@ -338,8 +342,8 @@ def main():
             args.templates, args.nginxconfd, args.document_root)
         vhosts = get_vhosts(args.vhostdir)
         rproxy = RProxy(simp_le, nginx_config, vhosts)
-    except ConfigError as ce:
-        logger.error(ce)  # pylint: disable=no-member
+    except ConfigError as config_error:
+        logger.error(config_error)  # pylint: disable=no-member
         sys.exit(1)
     rproxy.init_config()
     if args.mode == 'run':
