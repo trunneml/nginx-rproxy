@@ -254,18 +254,17 @@ class FreeTlsCertGenerator(object):
         return True
 
     def _issue_certificate(self, vhost, tos_url):
-        while True:
-            try:
-                self._call_freetls(vhost, tos_url)
-                return
-            except freetls.NeedToTakeAction as action_error:
-                for action in action_error.actions:
-                    if not isinstance(action, freetls.NeedToInstallFile):
-                        raise CertGenerationError(
-                            "Unexpected error while validating domain: %s", action)
-                    self._write_acme_challenge_file(action.file_name,
-                                                    action.contents)
+        try:
+            self._call_freetls(vhost, tos_url)
+        except freetls.NeedToTakeAction as action_error:
+            for action in action_error.actions:
+                if not isinstance(action, freetls.NeedToInstallFile):
+                    raise CertGenerationError(
+                        "Unexpected error while validating domain: %s", action)
+                self._write_acme_challenge_file(action.file_name,
+                                                action.contents)
             # Try it one more time
+            self._call_freetls(vhost, tos_url)
 
     def _write_acme_challenge_file(self, file_name, content):
         logger.debug("Writing challange file: %s", file_name)
