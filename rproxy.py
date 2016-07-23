@@ -390,8 +390,8 @@ def _get_args():
                         help="path to document_root")
 
     testing = os.environ.get('RPROXY_TESTING', None)
-    parser.add_argument("--testing", default=testing,
-                        help="path to document_root")
+    parser.add_argument("--testing", default=testing, action="store_true",
+                        help="Activates acme staging server")
 
     parser.add_argument("mode", choices=['init', 'run'],
                         help="defines the mode of rproxy")
