@@ -9,6 +9,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 import idna
 
@@ -194,9 +195,6 @@ class FreeTlsCertGenerator(object):
             tos_url = self._get_tos_url(vhost)
             self._issue_certificate(vhost, tos_url)
             return True
-        except freetls.WaitABit as wait_error:
-            logger.warning("Try again after: %s", wait_error.until_when)
-            return False
         except Exception:  # pylint: disable=W0703
             logger.exception(
                 "Unknown exception occured while generating certificate for %s",
@@ -273,17 +271,31 @@ class FreeTlsCertGenerator(object):
             filepointer.write(content)
 
     def _call_freetls(self, vhost, agree_to_tos_url=None):
+        try:
+            freetls.issue_certificate(
+                domains=vhost.domains,
+                certificate_file=vhost.certificate_file,
+                private_key_file=vhost.private_key_file,
+                account_cache_directory=vhost.folder,
+                acme_server=self._get_acme_server(),
+                agree_to_tos_url=agree_to_tos_url)
+        except freetls.WaitABit as wait_error:
+            logger.warning("Trying again after: %s", wait_error.until_when)
+            t_delta = wait_error.until_when - datetime.datetime.now()
+            seconds_to_wait = max(t_delta.total_seconds(), 0)
+            # Sleep until we should try it again
+            logger.debug("Sleeping for %i seconds", seconds_to_wait)
+            time.sleep(seconds_to_wait)
+            # Try it again
+            self._call_freetls(vhost, agree_to_tos_url)
+
+    def _get_acme_server(self):
         if self.testing:
-            acme_server = freetls.LETSENCRYPT_STAGING_SERVER
+            return freetls.LETSENCRYPT_STAGING_SERVER
         else:
-            acme_server = freetls.LETSENCRYPT_SERVER
-        freetls.issue_certificate(
-            domains=vhost.domains,
-            certificate_file=vhost.certificate_file,
-            private_key_file=vhost.private_key_file,
-            account_cache_directory=vhost.folder,
-            acme_server=acme_server,
-            agree_to_tos_url=agree_to_tos_url)
+            return freetls.LETSENCRYPT_SERVER
+
+
 
 class RProxy(object):
 
