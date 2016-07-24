@@ -181,6 +181,7 @@ class FreeTlsCertGenerator(object):
             # directory already exists
             pass
         self.testing = testing
+        self.tos_url = None
 
     def generate_cert(self, vhost):
         """
@@ -192,21 +193,13 @@ class FreeTlsCertGenerator(object):
         if self._check_certificate(vhost):
             return False
         try:
-            tos_url = self._get_tos_url(vhost)
-            self._issue_certificate(vhost, tos_url)
+            self._issue_certificate(vhost)
             return True
         except Exception:  # pylint: disable=W0703
             logger.exception(
                 "Unknown exception occured while generating certificate for %s",
                 vhost)
             return False
-
-    def _get_tos_url(self, vhost):
-        try:
-            self._call_freetls(vhost)
-        except freetls.NeedToAgreeToTOS as tos_error:
-            return tos_error.url
-        raise CertGenerationError("TOS URL detection failed")
 
     @staticmethod
     def _check_certificate(vhost, days=30, self_signed=False):
@@ -251,9 +244,9 @@ class FreeTlsCertGenerator(object):
         logger.info("Certificate of %s is valid", vhost)
         return True
 
-    def _issue_certificate(self, vhost, tos_url):
+    def _issue_certificate(self, vhost):
         try:
-            self._call_freetls(vhost, tos_url)
+            self._call_freetls(vhost)
         except freetls.NeedToTakeAction as action_error:
             for action in action_error.actions:
                 if not isinstance(action, freetls.NeedToInstallFile):
@@ -262,7 +255,7 @@ class FreeTlsCertGenerator(object):
                 self._write_acme_challenge_file(action.file_name,
                                                 action.contents)
             # Try it one more time
-            self._call_freetls(vhost, tos_url)
+            self._call_freetls(vhost)
 
     def _write_acme_challenge_file(self, file_name, content):
         logger.debug("Writing challange file: %s", file_name)
@@ -270,15 +263,22 @@ class FreeTlsCertGenerator(object):
         with open(filename, 'w') as filepointer:
             filepointer.write(content)
 
-    def _call_freetls(self, vhost, agree_to_tos_url=None):
+    def _call_freetls(self, vhost):
+        acme_server = self._get_acme_server()
+        logger.info(
+            "Calling issue_certificate for %s on %s", vhost, acme_server)
         try:
             freetls.issue_certificate(
                 domains=vhost.domains,
                 certificate_file=vhost.certificate_file,
                 private_key_file=vhost.private_key_file,
                 account_cache_directory=vhost.folder,
-                acme_server=self._get_acme_server(),
-                agree_to_tos_url=agree_to_tos_url)
+                acme_server=acme_server,
+                agree_to_tos_url=self.tos_url)
+            return
+        except freetls.NeedToAgreeToTOS as tos_error:
+            logger.warning("TOS URL changed to %s", tos_error.url)
+            self.tos_url = tos_error.url
         except freetls.WaitABit as wait_error:
             logger.warning("Trying again after: %s", wait_error.until_when)
             t_delta = wait_error.until_when - datetime.datetime.now()
@@ -286,8 +286,8 @@ class FreeTlsCertGenerator(object):
             # Sleep until we should try it again
             logger.debug("Sleeping for %i seconds", seconds_to_wait)
             time.sleep(seconds_to_wait)
-            # Try it again
-            self._call_freetls(vhost, agree_to_tos_url)
+        # Try it again
+        self._call_freetls(vhost)
 
     def _get_acme_server(self):
         if self.testing:
