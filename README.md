@@ -1,6 +1,5 @@
-[![](https://badge.imagelayers.io/trunneml/nginx-rproxy:latest.svg)](https://imagelayers.io/?images=trunneml/nginx-rproxy:latest 'Get your own badge on imagelayers.io')
-
 # nginx-rproxy
+
 nginx-rproxy is a docker image that contains a python program to configure and
 start nginx as a reverse proxy. One of it's main features is the automatic
 TLS/SSL certificate creation using let's encrypt.
@@ -65,6 +64,27 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
   $ docker network connect rproxynet <app_container>
   ```
   **Note:** You have to start your app container first.
+
+
+## Development and contribution
+
+For development checkout the code from the github repository and create the
+Python 3 venv by the included shell script.
+
+```sh
+$ git clone https://github.com/trunneml/nginx-rproxy.git
+...
+$ cd nginx-rproxy
+$ ./setup_venv
+```
+
+To upgrade the python dependencies run the following shell script. It will
+download the latest dependencies and updates your local venv.
+
+```sh
+$ ./upgrade_venv
+```
+
 
 ## License
 
