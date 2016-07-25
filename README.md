@@ -1,23 +1,80 @@
 [![](https://badge.imagelayers.io/trunneml/nginx-rproxy:latest.svg)](https://imagelayers.io/?images=trunneml/nginx-rproxy:latest 'Get your own badge on imagelayers.io')
 
 # nginx-rproxy
-nginx-rproxy is a Docker image that contains a python program to configure and starting nginx as a reverse proxy.
-It supports SSL certificate creation with let's encrypt and restarts nginx in case of an error.
+nginx-rproxy is a docker image that contains a python program to configure and
+start nginx as a reverse proxy. One of it's main features is the automatic
+TLS/SSL certificate creation using let's encrypt.
+It is inspired by https://github.com/jwilder/nginx-proxy, but uses an explicit configuration with docker network support instead of a complex container auto detection that has problems with the new docker network feature.
 
-## Features:
+
+## Features
 
 * Based on the **official nginx** docker image
+* **docker network support** (even overlay)
+* TLS/SSL termination
+* Maps domains to the related application server
 * Simple **Json configuration**
-* **HTTPS support** when certificate is present
-* HTTP to HTTS redirect
-* Auto SSL **certificate creation with Let's encrypt**
-* Restart nginx when needed
-* Monitors nginx if it crashes
+* **HTTPS support** (when certificate is present)
+* **HTTP to HTTS redirect**
+* Auto TLS/SSL **certificate creation using Let's encrypt**
+* Restarts nginx when needed
+* Monitors and restarts nginx (on crash)
 
 
-**Note:** This project is in an early state, but is in production use.
+## Usage
 
-## TODOs
-* Improved logging output
-* Write some test
-* Write setup.py
+nginx-rproxy is designed as a reverse proxy with TLS/SSL termination in front
+of your other web applications. nginx-rproxy maps the request based on the
+domain to the real web application. Normally these applications are also docker
+containers.
+
+nginx-rproxy is configured by JSON config files. Each config file represents a vhost, that maps the defined domains to a coonected HTTP server.
+
+
+## Installation and configuration
+
+1. nginx-rproxy is available on docker hub, so just pull the latest release.
+   ```sh
+   $ docker pull trunneml/nginx-rproxy:latest
+   ```
+2. For each ``vhost`` create a folder inside your docker host.
+   ```sh
+   $ mkdir -p /srv/nginx-rproxy/vhost/mynewvhost
+   ```
+   Put a file named ``conf`` in that folder:
+   ```sh
+   $ cat >/srv/nginx-rproxy/vhost/mynewhost/conf << EOL
+   {
+     "domains": ["example.com", "www.example.com"],
+     "target": "container1.rproxynet",
+     "letsencrypt": true,
+     "email": "info@example.com"
+   }
+   EOL
+   ```
+3. Create a new docker network and  run the nginx-rproxy container with the created config mounted.
+
+   ```sh
+   $ docker network create rproxynet
+   ```
+   ```sh
+   $ docker run -d -p 80:80 -p 443:443 --name rproxy --network rproxynet -v /srv/nginx-rproxy/vhost:/srv/rproxy/vhost trunneml/nginx-rproxy:latest
+   ```
+4. Connect your application server docker containers to the ``rproxynet``
+  ```sh
+  $ docker network connect rproxynet <app_container>
+  ```
+  **Note:** You have to start your app container first.
+
+## License
+
+nginx-rproxy is released under AGPL-3.0 or a newer version.
+
+You have to release all your code changes to your customers and visitors under the same license.  But other containers and connected web applications are not affected. So you can run a proprietary application behind nginx-rproxy.
+
+For more information read the ``LICENSE`` file in this repository.
+
+
+## Authors
+
+nginx-rproxy is developed by Michael Trunner.
