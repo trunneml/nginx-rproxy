@@ -88,13 +88,16 @@ $ ./upgrade_venv
 
 ## License
 
-nginx-rproxy is released under AGPL-3.0 or a newer version.
+Copyright (C) 2016 Michael Trunner
 
-You have to release all your code changes to your customers and visitors under the same license.  But other containers and connected web applications are not affected. So you can run a proprietary application behind nginx-rproxy.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or any later version.
 
-For more information read the ``LICENSE`` file in this repository.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
 
-
-## Authors
-
-nginx-rproxy is developed by Michael Trunner.
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
