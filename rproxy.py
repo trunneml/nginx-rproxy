@@ -1,4 +1,23 @@
 #!/usr/bin/env python
+"""
+nginx-rproxy is a small wrapper to configure and restart nginx.
+
+    Copyright (C) 2016 Michael Trunner
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or any
+    later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+# pylint: disable=C0111
 import argparse
 import ctypes
 import datetime
@@ -8,11 +27,19 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
-logger = logging.getLogger('RProxy' if __name__ == '__main__' else __name__)
+import idna
+
+from free_tls_certificates import client as freetls
+from free_tls_certificates import utils as freetlsutis
 
 
-libc = ctypes.CDLL("libc.so.6")
+logger = logging.getLogger(  # pylint: disable=C0103
+    'RProxy' if __name__ == '__main__' else __name__)
+
+
+libc = ctypes.CDLL("libc.so.6")  # pylint: disable=C0103
 
 
 def set_pdeathsig(sig=signal.SIGTERM):
@@ -35,10 +62,13 @@ class ConfigError(Exception):
 
 
 class Vhost(object):
+    # pylint: disable=R0903, R0902
 
     def __init__(self, vhost_folder):
         self.folder = os.path.abspath(vhost_folder)
         self.name = os.path.basename(vhost_folder)
+        self.certificate_file = os.path.join(self.folder, "fullchain.pem")
+        self.private_key_file = os.path.join(self.folder, "key.pem")
         config = self._read_config()
         try:
             self.email = config['email']
@@ -49,8 +79,13 @@ class Vhost(object):
             if not self.domains:
                 raise ConfigError("domains must not be empty", self)
             self.letsencrypt = config.get('letsencrypt', False)
-        except KeyError as ke:
-            raise ConfigError("Missing config parameter %s in %s" % (ke, self))
+        except KeyError as key_error:
+            raise ConfigError(
+                "Missing config parameter %s in %s" % (key_error, self))
+
+    def has_certificate(self):
+        return os.path.isfile(self.certificate_file) \
+            and os.path.isfile(self.private_key_file)
 
     def _read_config(self):
         logger.debug("Reading vhost config of %s", self)
@@ -88,8 +123,6 @@ class NginxConfigGenerator(object):
 
     HTTP_TMPL = 'http.conf.tmpl'
     HTTPS_TMPL = 'https.conf.tmpl'
-    CERT_FILE = 'fullchain.pem'
-    KEY_FILE = 'key.pem'
 
     def __init__(self, template_dir, nginx_conf_dir, document_root):
         if not os.path.isdir(nginx_conf_dir):
@@ -108,14 +141,9 @@ class NginxConfigGenerator(object):
             logger.error(ioe)
             raise ConfigError("Coundn't read nginx templates")
 
-    def hasCertificate(self, vhost):
-        key_file = os.path.join(vhost.folder, self.KEY_FILE)
-        cert_file = os.path.join(vhost.folder, self.CERT_FILE)
-        return os.path.isfile(key_file) and os.path.isfile(cert_file)
-
     def configure_vhost(self, vhost):
         logger.info("Generating vhost config for %s", vhost)
-        if self.hasCertificate(vhost):
+        if vhost.has_certificate():
             logger.debug("Using HTTPS template for %s", vhost)
             nginx_tmpl = self.https_template
         else:
@@ -126,9 +154,9 @@ class NginxConfigGenerator(object):
                                        'target': vhost.target,
                                        'document_root': self.document_root,
                                        'vhost': vhost.name}
-        except KeyError as ke:
+        except KeyError as key_error:
             raise ConfigGeneratorError(
-                "Missing config parameters for vhost %s" % vhost, ke)
+                "Missing config parameters for vhost %s" % vhost, key_error)
         self.write_nginx_config(vhost, nginx_conf)
 
     def write_nginx_config(self, vhost, config):
@@ -157,16 +185,21 @@ class CertGenerationError(Exception):
     pass
 
 
-class SimpLeCertGenerator(object):
+class FreeTlsCertGenerator(object):
+    # pylint: disable=R0903
 
-    TESTING = "https://acme-staging.api.letsencrypt.org/directory"
-
-    def __init__(self, simp_le_path, document_root, testing):
-        self.simp_le_path = simp_le_path
+    def __init__(self, document_root, testing):
         if not os.path.isdir(document_root):
             raise ConfigError("document_root must be a directory")
-        self.document_root = document_root
+        self.acme_challenge_dir = os.path.join(
+            document_root, '.well-known', 'acme-challenge')
+        try:
+            os.makedirs(self.acme_challenge_dir)
+        except os.error:
+            # directory already exists
+            pass
         self.testing = testing
+        self.tos_url = None
 
     def generate_cert(self, vhost):
         """
@@ -174,29 +207,112 @@ class SimpLeCertGenerator(object):
         False when no update is needed.
         """
         logger.info("Generating new let's encrypt certificate for %s", vhost)
-        cmd = [self.simp_le_path, "--default_root", self.document_root,
-               "-f", "account_key.json",
-               "-f", "fullchain.pem", "-f", "key.pem"]
-        if self.testing:
-            logger.warn("Using ACME staging directory!")
-            cmd.extend(("--server", self.TESTING))
-        cmd.extend(("--email", vhost.email))
-        for domain in vhost.domains:
-            cmd.extend(("-d", domain))
-        logger.debug("Calling command: %s", cmd)
+
+        if self._check_certificate(vhost):
+            return False
         try:
-            exit_code = subprocess.call(cmd, cwd=vhost.folder)
-        except OSError as ose:
-            raise CertGenerationError(
-                "Error while generating cert for %s", ose)
-        logger.debug("Command exit code was: %i", exit_code)
-        if exit_code >= 2:
-            raise CertGenerationError(
-                "Error %i while generating cert for %s"
-                % (exit_code, vhost.domains))
-        if exit_code == 0:
-            logger.info("New certificate generated for %s", vhost)
-        return exit_code == 0
+            self._issue_certificate(vhost)
+            return True
+        except Exception:  # pylint: disable=W0703
+            logger.exception(
+                "Unknown exception occured while generating certificate for %s",
+                vhost)
+            return False
+
+    @staticmethod
+    def _check_certificate(vhost, days=30, self_signed=False):
+        if not os.path.exists(vhost.certificate_file):
+            logger.info("Certificate file of %s not present.", vhost)
+            return False
+
+        # Load the certificate.
+        cert = freetlsutis.load_certificate(vhost.certificate_file)
+
+        # If this is a self-signed certificate (and the user is seeking
+        # a real one), provision a new one.
+        if cert.issuer == cert.subject and not self_signed:
+            logger.info("Replacing self-signed certificate of %s", vhost)
+            return False
+
+        # If this is expiring within the given days, provision a new one.
+        expires_in = cert.not_valid_after - datetime.datetime.now()
+        if expires_in < datetime.timedelta(days=days):
+            logger.info("Replacing expiring certificate of %s (expires in %s).",
+                        vhost, expires_in)
+            return False
+
+        # If the certificate is not valid for one of the domains
+        # we're requesting, provision a new one.
+        def idna_encode(domain):
+            # squash exceptions here
+            try:
+                return idna.encode(domain).decode("ascii")
+            except Exception:  # pylint: disable=W0703
+                return domain
+
+        request_domains = set(idna_encode(domain) for domain in vhost.domains)
+        cert_domains = set(freetlsutis.get_certificate_domains(cert))
+        missing_domains = request_domains - cert_domains
+        if missing_domains:
+            logger.info("Certificate of %s is not valid for: %s",
+                        vhost, missing_domains)
+            return False
+
+        # Certificate is valid for the requested domains - no need to provision.
+        logger.info("Certificate of %s is valid", vhost)
+        return True
+
+    def _issue_certificate(self, vhost):
+        try:
+            self._call_freetls(vhost)
+        except freetls.NeedToTakeAction as action_error:
+            for action in action_error.actions:
+                if not isinstance(action, freetls.NeedToInstallFile):
+                    raise CertGenerationError(
+                        "Unexpected error while validating domain: %s", action)
+                self._write_acme_challenge_file(action.file_name,
+                                                action.contents)
+            # Try it one more time
+            self._call_freetls(vhost)
+
+    def _write_acme_challenge_file(self, file_name, content):
+        logger.debug("Writing challange file: %s", file_name)
+        filename = os.path.join(self.acme_challenge_dir, file_name)
+        with open(filename, 'w') as filepointer:
+            filepointer.write(content)
+
+    def _call_freetls(self, vhost):
+        acme_server = self._get_acme_server()
+        logger.info(
+            "Calling issue_certificate for %s on %s", vhost, acme_server)
+        try:
+            freetls.issue_certificate(
+                domains=vhost.domains,
+                certificate_file=vhost.certificate_file,
+                private_key_file=vhost.private_key_file,
+                account_cache_directory=vhost.folder,
+                acme_server=acme_server,
+                agree_to_tos_url=self.tos_url)
+            return
+        except freetls.NeedToAgreeToTOS as tos_error:
+            logger.warning("TOS URL changed to %s", tos_error.url)
+            self.tos_url = tos_error.url
+        except freetls.WaitABit as wait_error:
+            logger.warning("Trying again after: %s", wait_error.until_when)
+            t_delta = wait_error.until_when - datetime.datetime.now()
+            seconds_to_wait = max(t_delta.total_seconds(), 0)
+            # Sleep until we should try it again
+            logger.debug("Sleeping for %i seconds", seconds_to_wait)
+            time.sleep(seconds_to_wait)
+        # Try it again
+        self._call_freetls(vhost)
+
+    def _get_acme_server(self):
+        if self.testing:
+            return freetls.LETSENCRYPT_STAGING_SERVER
+        else:
+            return freetls.LETSENCRYPT_SERVER
+
 
 
 class RProxy(object):
@@ -241,19 +357,20 @@ class RProxy(object):
             signal.alarm(3600)
         signal.signal(signal.SIGALRM, receive_alarm)
         # Wait sometime so nginx is ready for acme challange
-        signal.alarm(5)
+        signal.alarm(15)
         while True:
             self._restart_nginx()
             self._nginx.wait()  # Wait for SIGALRM or NGINX dies
 
     def _update_config(self):
-        if datetime.datetime.now() < self._next_run:
-            logger.debug("To early for a cert update.")
-            return
+        #if datetime.datetime.now() < self._next_run:
+        #    logger.debug("To early for a cert update.")
+        #    return
 
         nginx_reload = False
         for vhost in self.vhosts:
             if vhost.letsencrypt:
+                logger.info("Checking letsencrypt cert of vhost %s", vhost)
                 nginx_reload = nginx_reload or self._new_cert_and_config(vhost)
         if nginx_reload:
             logger.debug("NGINX needs a reload")
@@ -261,19 +378,20 @@ class RProxy(object):
         self._schedule_next_cert_update()
 
     def _schedule_next_cert_update(self):
-        nd = datetime.date.today() + datetime.timedelta(days=1)
+        next_day = datetime.date.today() + datetime.timedelta(days=1)
         self._next_run = datetime.datetime(
-            year=nd.year, month=nd.month, day=nd.day, hour=2)
+            year=next_day.year, month=next_day.month, day=next_day.day, hour=2)
         logger.debug("Next run scheduled for: %s", self._next_run)
 
     def _new_cert_and_config(self, vhost):
         try:
             if not self.cert_generator.generate_cert(vhost):
                 return False
+            logger.info("Let's encrypt certificate of %s has changed", vhost)
             self.config_generator.configure_vhost(vhost)
             return True
         except CertGenerationError as cge:
-            logger.warn(cge)
+            logger.warning(cge)
             return False
         except ConfigGeneratorError as vhe:
             logger.error(vhe)
@@ -299,18 +417,14 @@ def _get_args():
     parser.add_argument("-n", "--nginxconfd", default=nginx_conf_dir,
                         help="path to the nginx conf.d directory")
 
-    simp_le = os.environ.get('RPROXY_SIMP_LE', 'simp_le')
-    parser.add_argument("-s", "--simp_le", default=simp_le,
-                        help="path to simp_le acme client")
-
     document_root = os.environ.get(
         'RPROXY_DOCUMENT_ROOT', os.path.abspath('webroot'))
     parser.add_argument("-r", "--document_root", default=document_root,
                         help="path to document_root")
 
     testing = os.environ.get('RPROXY_TESTING', None)
-    parser.add_argument("--testing", default=testing,
-                        help="path to document_root")
+    parser.add_argument("--testing", default=testing, action="store_true",
+                        help="Activates acme staging server")
 
     parser.add_argument("mode", choices=['init', 'run'],
                         help="defines the mode of rproxy")
@@ -332,14 +446,13 @@ def main():
     _configure_logging(args)
 
     try:
-        simp_le = SimpLeCertGenerator(
-            args.simp_le, args.document_root, args.testing)
+        gener = FreeTlsCertGenerator(args.document_root, args.testing)
         nginx_config = NginxConfigGenerator(
             args.templates, args.nginxconfd, args.document_root)
         vhosts = get_vhosts(args.vhostdir)
-        rproxy = RProxy(simp_le, nginx_config, vhosts)
-    except ConfigError as ce:
-        logger.error(ce)  # pylint: disable=no-member
+        rproxy = RProxy(gener, nginx_config, vhosts)
+    except ConfigError as config_error:
+        logger.error(config_error)  # pylint: disable=no-member
         sys.exit(1)
     rproxy.init_config()
     if args.mode == 'run':
