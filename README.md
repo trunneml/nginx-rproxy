@@ -33,14 +33,19 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
 ## Installation and configuration
 
 1. nginx-rproxy is available on docker hub, so just pull the latest release.
+
    ```sh
    $ docker pull trunneml/nginx-rproxy:latest
    ```
+
 2. For each ``vhost`` create a folder inside your docker host.
+
    ```sh
    $ mkdir -p /srv/nginx-rproxy/vhost/mynewvhost
    ```
+
    Put a file named ``conf`` in that folder:
+
    ```sh
    $ cat >/srv/nginx-rproxy/vhost/mynewhost/conf << EOL
    {
@@ -51,18 +56,23 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
    }
    EOL
    ```
+
 3. Create a new docker network and  run the nginx-rproxy container with the created config mounted.
 
    ```sh
    $ docker network create rproxynet
    ```
+
    ```sh
    $ docker run -d -p 80:80 -p 443:443 --name rproxy --network rproxynet -v /srv/nginx-rproxy/vhost:/srv/rproxy/vhost trunneml/nginx-rproxy:latest
    ```
+
 4. Connect your application server docker containers to the ``rproxynet``
+
   ```sh
   $ docker network connect rproxynet <app_container>
   ```
+
   **Note:** You have to start your app container first.
 
 
