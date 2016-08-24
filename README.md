@@ -1,3 +1,5 @@
+[![](https://images.microbadger.com/badges/version/trunneml/nginx-rproxy.svg)](http://microbadger.com/images/trunneml/nginx-rproxy "Get your own version badge on microbadger.com")
+
 # nginx-rproxy
 
 nginx-rproxy is a docker image that contains a python program to configure and
