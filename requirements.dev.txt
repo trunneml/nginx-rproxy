@@ -1,6 +1,0 @@
-ipython
-flake8
-pylint
-jedi
-autopep8
-isort
