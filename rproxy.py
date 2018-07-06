@@ -27,7 +27,6 @@ import os
 import signal
 import subprocess
 import sys
-import time
 
 import idna
 
@@ -303,7 +302,7 @@ class FreeTlsCertGenerator(object):
             seconds_to_wait = max(t_delta.total_seconds(), 0)
             # Sleep until we should try it again
             logger.debug("Sleeping for %i seconds", seconds_to_wait)
-            time.sleep(seconds_to_wait)
+            signal.alarm(seconds_to_wait)
         # Try it again
         self._call_freetls(vhost)
 
