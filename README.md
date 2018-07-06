@@ -57,7 +57,7 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
    EOL
    ```
 
-3. Create a new docker network and  run the nginx-rproxy container with the created config mounted.
+3. Create a new docker network and run the nginx-rproxy container with the created config mounted.
 
    ```sh
    $ docker network create rproxynet
@@ -79,26 +79,18 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
 ## Development and contribution
 
 For development checkout the code from the github repository and create the
-Python 3 venv by the included shell script.
+Python 3 venv.
 
 ```sh
 $ git clone https://github.com/trunneml/nginx-rproxy.git
 ...
 $ cd nginx-rproxy
-$ ./setup_venv
+$ python -m autovenv
 ```
-
-To upgrade the python dependencies run the following shell script. It will
-download the latest dependencies and updates your local venv.
-
-```sh
-$ ./upgrade_venv
-```
-
 
 ## License
 
-Copyright (C) 2016 Michael Trunner
+Copyright (C) 2016-2018 Michael Trunner
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
