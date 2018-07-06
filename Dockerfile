@@ -20,6 +20,8 @@ RUN apt-get update \
     libffi-dev \
     python-dev \
     python-pip \
+    python-wheel \
+    python-setuptools \
 && pip install free_tls_certificates
 
 ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot

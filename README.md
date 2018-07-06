@@ -32,13 +32,27 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
 
 ## Installation and configuration
 
-1. nginx-rproxy is available on docker hub, so just pull the latest release.
+1. Start your app container.
+
+2. nginx-rproxy is available on docker hub, so just pull the latest release.
 
    ```sh
    $ docker pull trunneml/nginx-rproxy:latest
    ```
 
-2. For each ``vhost`` create a folder inside your docker host.
+3. Create a new docker network
+
+    ```sh
+    $ docker network create rproxynet
+    ```
+
+4. Connect your application server docker containers to the ``rproxynet``
+
+   ```sh
+   $ docker network connect rproxynet <app_container>
+   ```
+
+5. For each ``vhost`` create a folder inside your docker host.
 
    ```sh
    $ mkdir -p /srv/nginx-rproxy/vhost/mynewvhost
@@ -50,30 +64,28 @@ nginx-rproxy is configured by JSON config files. Each config file represents a v
    $ cat >/srv/nginx-rproxy/vhost/mynewhost/conf << EOL
    {
      "domains": ["example.com", "www.example.com"],
-     "target": "container1.rproxynet",
      "letsencrypt": true,
      "email": "info@example.com"
    }
    EOL
    ```
 
-3. Create a new docker network and run the nginx-rproxy container with the created config mounted.
+   And a ``nginx-include.conf`` file with the nginx config:
 
-   ```sh
-   $ docker network create rproxynet
+   ```#!/bin/sh
+
+   $ cat >/srv/nginx-rproxy/vhost/mynewhost/nginx-include.conf << EOL
+   location / {
+		proxy_pass http://container1.rproxynet:80;
+   }
+   EOL
    ```
+
+6.  Finally start the nginx-rproxy container with the created config mounted.
 
    ```sh
    $ docker run -d -p 80:80 -p 443:443 --name rproxy --network rproxynet -v /srv/nginx-rproxy/vhost:/srv/rproxy/vhost trunneml/nginx-rproxy:latest
    ```
-
-4. Connect your application server docker containers to the ``rproxynet``
-
-  ```sh
-  $ docker network connect rproxynet <app_container>
-  ```
-
-  **Note:** You have to start your app container first.
 
 
 ## Development and contribution
