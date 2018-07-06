@@ -37,4 +37,6 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
+EXPOSE 80 443
+
 CMD ["/srv/rproxy/rproxy.py", "-v", "run"]
