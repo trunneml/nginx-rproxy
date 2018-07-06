@@ -3,9 +3,8 @@ server {
 	listen 80;
 	access_log off;
 
-	location / {
-		proxy_pass http://%(target)s:80;
-	}
+	include       %(nginx_vhost)s;
+
 	location ^~ /.well-known/acme-challenge/ {
 		alias %(document_root)s/.well-known/acme-challenge/;
 		try_files $uri =404;

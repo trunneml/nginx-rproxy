@@ -61,6 +61,9 @@ class ConfigError(Exception):
 
 
 class Vhost(object):
+    """
+    This Class epresents NGINX reverse proxy vhosts instances.
+    """
     # pylint: disable=R0903, R0902
 
     def __init__(self, vhost_folder):
@@ -68,10 +71,12 @@ class Vhost(object):
         self.name = os.path.basename(vhost_folder)
         self.certificate_file = os.path.join(self.folder, "fullchain.pem")
         self.private_key_file = os.path.join(self.folder, "key.pem")
+        self.nginx_vhost_file = os.path.join(self.folder, "nginx-include.conf")
+        if not os.path.isfile(self.nginx_vhost_file):
+            raise ConfigError("No nginx-include.conf found")
         config = self._read_config()
         try:
             self.email = config['email']
-            self.target = config['target']
             self.domains = config['domains']
             if not isinstance(self.domains, list):
                 raise ConfigError("domains must be a list", self)
@@ -83,10 +88,18 @@ class Vhost(object):
                 "Missing config parameter %s in %s" % (key_error, self))
 
     def has_certificate(self):
+        """
+        Returns true when cert and key files are available
+        """
         return os.path.isfile(self.certificate_file) \
             and os.path.isfile(self.private_key_file)
 
     def _read_config(self):
+        """
+        Reads the conf JSON file from the vhost folder.
+
+        returns it's content.
+        """
         logger.debug("Reading vhost config of %s", self)
         vhost_conf_filepath = os.path.join(self.folder, 'conf')
         try:
@@ -107,11 +120,11 @@ class Vhost(object):
     def __str__(self):
         return self.name
 
-
-def get_vhosts(vhost_dir):
-    logger.info("Reading all vhosts from %s", vhost_dir)
-    return [Vhost(os.path.join(vhost_dir, vh)) for vh in os.listdir(vhost_dir)
-            if os.path.isdir(os.path.join(vhost_dir, vh))]
+    @classmethod
+    def load_vhosts(cls, vhost_dir):
+        logger.info("Reading all vhosts from %s", vhost_dir)
+        return [cls(os.path.join(vhost_dir, vh)) for vh in os.listdir(vhost_dir)
+                if os.path.isdir(os.path.join(vhost_dir, vh))]
 
 
 class ConfigGeneratorError(Exception):
@@ -119,6 +132,10 @@ class ConfigGeneratorError(Exception):
 
 
 class NginxConfigGenerator(object):
+    """
+    NGINX config generator that generates vhost configs form the
+    loaded vhosts objects.
+    """
 
     HTTP_TMPL = 'http.conf.tmpl'
     HTTPS_TMPL = 'https.conf.tmpl'
@@ -150,7 +167,7 @@ class NginxConfigGenerator(object):
             nginx_tmpl = self.http_template
         try:
             nginx_conf = nginx_tmpl % {'servernames': ' '.join(vhost.domains),
-                                       'target': vhost.target,
+                                       'nginx_vhost': vhost.nginx_vhost_file,
                                        'document_root': self.document_root,
                                        'vhost': vhost.name}
         except KeyError as key_error:
@@ -185,6 +202,10 @@ class CertGenerationError(Exception):
 
 
 class FreeTlsCertGenerator(object):
+    """
+    This Generator generates Let's encrypt certificates for a given vhosts
+    object by using free_tls_certificates.
+    """
     # pylint: disable=R0903
 
     def __init__(self, document_root, testing):
@@ -281,6 +302,9 @@ class FreeTlsCertGenerator(object):
             filepointer.write(content)
 
     def _call_freetls(self, vhost):
+        """
+        Calls the underlying free_tls_certificates lib.
+        """
         acme_server = self._get_acme_server()
         logger.info(
             "Calling issue_certificate for %s on %s", vhost, acme_server)
@@ -309,9 +333,7 @@ class FreeTlsCertGenerator(object):
     def _get_acme_server(self):
         if self.testing:
             return freetls.LETSENCRYPT_STAGING_SERVER
-        else:
-            return freetls.LETSENCRYPT_SERVER
-
+        return freetls.LETSENCRYPT_SERVER
 
 
 class RProxy(object):
@@ -448,7 +470,7 @@ def main():
         gener = FreeTlsCertGenerator(args.document_root, args.testing)
         nginx_config = NginxConfigGenerator(
             args.templates, args.nginxconfd, args.document_root)
-        vhosts = get_vhosts(args.vhostdir)
+        vhosts = Vhost.load_vhosts(args.vhostdir)
         rproxy = RProxy(gener, nginx_config, vhosts)
     except ConfigError as config_error:
         logger.error(config_error)  # pylint: disable=no-member
