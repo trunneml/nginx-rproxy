@@ -323,7 +323,7 @@ class FreeTlsCertGenerator(object):
         except freetls.WaitABit as wait_error:
             logger.warning("Trying again after: %s", wait_error.until_when)
             t_delta = wait_error.until_when - datetime.datetime.now()
-            seconds_to_wait = max(t_delta.total_seconds(), 0)
+            seconds_to_wait = int(max(t_delta.total_seconds(), 0)) + 1
             # Sleep until we should try it again
             logger.debug("Sleeping for %i seconds", seconds_to_wait)
             signal.alarm(seconds_to_wait)
