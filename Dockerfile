@@ -24,6 +24,10 @@ RUN apt-get update \
     python-setuptools \
 && pip install free_tls_certificates
 
+# Workaround for: https://github.com/mail-in-a-box/free_tls_certificates/pull/12
+# Workaround for: https://github.com/mail-in-a-box/free_tls_certificates/pull/9
+RUN pip install acme==0.20.0
+
 ENV RPROXY_DOCUMENT_ROOT /srv/rproxy/webroot
 
 RUN mkdir -p ${RPROXY_DOCUMENT_ROOT}
